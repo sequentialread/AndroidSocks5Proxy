@@ -2,22 +2,11 @@ package com.sequentialread.socks5_proxy_server;
 
 import android.util.Log;
 
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOError;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
 import java.net.Socket;
-import java.net.URL;
-import java.nio.ByteBuffer;
 
 /**
  * Created by JYM on 2016/7/12.
@@ -42,15 +31,15 @@ public class ServerThread implements Runnable {
             ByteArrayOutputStream byteArrayOutputStream;
 
             /**
-             * client会向proxy发送510，所以这里执行的结果是buff={5,1,0}
-             * Caution: 这里不能跟下面的innerInputStream.read(buff, 0, 10);合并成innerInputStream.read(buff, 0, 13);
-             *          我试过，大部分情况没影响，但是偶尔会出现重大bug（读不出外网ip），至于原因暂不详
-             *          看来这种input和output类型的操作还是稳重一点，不要太心急
+             * The client will send 510 to the proxy, so the result of execution here is buff={5,1,0}
+             * Caution: This cannot be combined with the following innerInputStream.read(buff, 0, 10); into innerInputStream.read(buff, 0, 13);
+             *          I have tried, and most of the cases have no effect, but occasionally there will be major bugs (cannot read the external network ip), as for the reason is not known yet
+             *          It seems that the operation of this type of input and output is still a little more prudent, don't be too impatient
              */
             innerInputStream.read(buff, 0, 3);
 
             /**
-             *  proxy向client发送应答{5,0}
+             *  The proxy sends a response to the client {5,0}
              */
             byte[] firstAckMessage = new byte[]{5, 0};
             byte[] secondAckMessage = new byte[10];
@@ -58,9 +47,9 @@ public class ServerThread implements Runnable {
             innerOutputStream.flush();
 
             /**
-             *     client发送命令5101+目的地址（4Bytes）+目的端口（2Bytes)
-             *     即{5,1,0,1,IPx1,IPx2,IPx3,IPx4,PORTx1,PORTx2} 一共10位
-             *     例如发送给52.88.216.252服务器的80端口，那么这里buff就是{5,1,0,1,52,88,-40,-4,0,80}（这里每位都是byte，所以在-128~127之间，可以自己换算成0~255）
+             * The client sends the command 5101 + destination address (4Bytes) + destination port (2Bytes)
+             * That is {5,1,0,1,IPx1,IPx2,IPx3,IPx4,PORTx1,PORTx2} a total of 10 bits
+             * For example, sent to port 80 of the 52.88.216.252 server, then the buff here is {5,1,0,1,52,88,-40,-4,0,80} (where each bit is byte, so in- Between 128~127, you can convert it to 0~255 by yourself)
              */
             innerInputStream.read(buff, 0, 10);
 
@@ -73,7 +62,7 @@ public class ServerThread implements Runnable {
             OutputStream outerOutputStream = outerSocket.getOutputStream();
 
             /**
-             * proxy 向 client 返回应答5+0+0+1+因特网套接字绑定的IP地址（4字节的16进制表示）+因特网套接字绑定的端口号（2字节的16进制表示）
+             * The proxy returns a response 5+0+0+1+Internet socket bound IP address (4-byte hexadecimal representation) + Internet socket bound port number (2-byte hexadecimal System representation)
              */
             byte ip1[] = new byte[4];
             int port1 = 0;
@@ -94,13 +83,13 @@ public class ServerThread implements Runnable {
             innerOutputStream.flush();
 
             /**
-             * 新线程：从外网不断读数据发到client
+             * New thread: continuously read data from the external network and send it to the client
              */
             SocksResponseThread responseThread = new SocksResponseThread(outerInputStream, innerOutputStream);
             responseThread.start();
 
             /**
-             * 本线程：从client不断读数据发到外网
+             * This thread: continuously read data from the client and send it to the external networkk
              */
             byteArrayOutputStream = new ByteArrayOutputStream();
             while ((rc = innerInputStream.read(buff, 0, BUFF_SIZE)) > 0) {
