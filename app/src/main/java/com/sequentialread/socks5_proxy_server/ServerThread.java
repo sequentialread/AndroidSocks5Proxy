@@ -9,8 +9,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
-import java.util.Arrays;
-
 /**
  * Created by JYM on 2016/7/12.
  */
@@ -120,6 +118,7 @@ public class ServerThread implements Runnable {
             } catch (Exception ex) {
                 innerOutputStream.write(new byte[]{0x05, 0x01}); //version 05, 01 "general SOCKS server failure"
                 innerOutputStream.flush();
+                socket.close();
                 return;
             }
             Log.e(TAG, "Connected to " + ip + ":" + port);
