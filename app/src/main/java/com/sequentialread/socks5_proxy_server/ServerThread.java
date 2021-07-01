@@ -24,9 +24,13 @@ public class ServerThread implements Runnable {
 
     @Override
     public void run() {
+        String connectionDescription = "error getting connection description";
+        Socket outerSocket = null;
         try {
             InputStream innerInputStream = socket.getInputStream();
             OutputStream innerOutputStream = socket.getOutputStream();
+            String clientAddress = socket.getRemoteSocketAddress().toString().substring(1);
+            connectionDescription = clientAddress + "                     ";
             byte[] buff = new byte[BUFF_SIZE];
             int rc;
             ByteArrayOutputStream byteArrayOutputStream;
@@ -36,16 +40,20 @@ public class ServerThread implements Runnable {
             // second byte specifies the number of SOCKS5 methods that the client wants to use.
             byte[] clientHello = new byte[2];
             innerInputStream.read(clientHello, 0, 2);
-            Log.d(TAG, bytes2HexString( clientHello  ));
+            //Log.d(TAG, bytes2HexString( clientHello  ));
             // only support version 5
             if(clientHello[0] != (byte)0x05) {
+                OnScreenLog.log(
+                        "incoming connection "+connectionDescription
+                        +" was closed because first byte '0x"+bytes2HexString(new byte[]{clientHello[0]})
+                        +"' was != 0x05 (un-suppported SOCKS version)"
+                );
                 socket.close();
                 return;
             }
             int numberOfMethods = byte2int(clientHello[1]);
             byte[] methods = new byte[numberOfMethods];
             innerInputStream.read(methods, 0, numberOfMethods);
-            Log.d(TAG, bytes2HexString( methods  ));
             boolean foundNoAuthRequiredMethod = false;
             for (byte method : methods) {
                 if(method == (byte)0x00) {
@@ -53,8 +61,10 @@ public class ServerThread implements Runnable {
                 }
             }
             if(!foundNoAuthRequiredMethod) {
-                // we only accept the "no authentication required" method.
-                // if it is not requested, then we respond with  NO ACCEPTABLE METHODS (0xFF)
+                OnScreenLog.log(
+                        "incoming connection "+connectionDescription
+                        +" was closed because the client did not request the \"no authentication required\" method"
+                );
                 byte noAcceptableMethods = (byte)0xFF;
                 innerOutputStream.write(new byte[]{noAcceptableMethods});
                 innerOutputStream.flush();
@@ -64,7 +74,7 @@ public class ServerThread implements Runnable {
             // the client requested the "no authentication required" method 0x00,
             // so we will respond saying that we, the server, are version 5 and we prefer that method.
 
-            Log.d(TAG, "ok we got the NoAuthRequiredMethod, sending 0500");
+            OnScreenLog.log(connectionDescription + " (accept)");
             innerOutputStream.write(new byte[]{(byte)0x05, (byte)0x00});
             innerOutputStream.flush();
 
@@ -73,26 +83,35 @@ public class ServerThread implements Runnable {
             // so up next we listen for socks5 commands from the client.
 
             byte[] clientCommand = new byte[4];
-
-            Log.d(TAG, "trying to read clientCommand");
             innerInputStream.read(clientCommand, 0, 4);
-            Log.d(TAG, bytes2HexString( clientCommand  ));
 
             // https://datatracker.ietf.org/doc/html/rfc1928 page 4
             if(clientCommand[0] != (byte)0x05) {
-                Log.e(TAG, "closing connection because socks version '"+bytes2HexString( new byte[]{clientCommand[0]}  )+"' is not supported. expected 05.");
+                OnScreenLog.log(
+                        "incoming connection "+connectionDescription
+                                + " was closed because socks version '0x"+bytes2HexString( new byte[]{clientCommand[0]}  )
+                                +"' is not supported. expected 0x05."
+                );
                 socket.close();
                 return;
             }
             if(clientCommand[1] != (byte)0x01) {
-                Log.e(TAG, "closing connection because socks command '"+bytes2HexString( new byte[]{clientCommand[1]}  )+"' is not supported. expected 01 (CONNECT).");
+                OnScreenLog.log(
+                        "incoming connection "+connectionDescription
+                                + " was closed because socks command '0x"+bytes2HexString( new byte[]{clientCommand[1]}  )
+                                +"' is not supported. expected 0x01 (CONNECT)."
+                );
                 innerOutputStream.write(new byte[]{0x05, 0x07}); //version 05, 07 "Command not supported"
                 innerOutputStream.flush();
                 socket.close();
                 return;
             }
             if(clientCommand[3] != (byte)0x01) {
-                Log.e(TAG, "closing connection because socks address type '"+bytes2HexString( new byte[]{clientCommand[3]}  )+"' is not supported. expected 01 (IP version 4).");
+                OnScreenLog.log(
+                        "incoming connection "+connectionDescription
+                                + " was closed because socks address type '0x"+bytes2HexString( new byte[]{clientCommand[3]}  )
+                                +"' is not supported. expected 0x01 (IP version 4)."
+                );
                 innerOutputStream.write(new byte[]{0x05, 0x08}); //version 05, 08 "Address type not supported"
                 innerOutputStream.flush();
                 socket.close();
@@ -100,15 +119,15 @@ public class ServerThread implements Runnable {
             }
 
             byte[] connectAddress = new byte[6];
-            Log.d(TAG, "trying to read connectAddress");
             innerInputStream.read(connectAddress, 0, 6);
-            Log.d(TAG, bytes2HexString( connectAddress  ));
 
             String ip = byte2int(connectAddress[0]) + "." + byte2int(connectAddress[1]) + "." + byte2int(connectAddress[2]) + "." + byte2int(connectAddress[3]);
             int port = byte2int(connectAddress[4]) * 256 + byte2int(connectAddress[5]);
-            Log.d(TAG, ip+":"+port);
 
-            Socket outerSocket = null;
+            connectionDescription = clientAddress + " --> " + ip+":"+port;
+            OnScreenLog.log(connectionDescription + " (dailing)");
+
+
             InputStream outerInputStream = null;
             OutputStream outerOutputStream = null;
             try {
@@ -121,7 +140,6 @@ public class ServerThread implements Runnable {
                 socket.close();
                 return;
             }
-            Log.e(TAG, "Connected to " + ip + ":" + port);
 
             // respond to the client with the connection details once the connection has been established.
             byte[] remoteIp = outerSocket.getLocalAddress().getAddress();
@@ -134,11 +152,13 @@ public class ServerThread implements Runnable {
             }, 0, 10);
             innerOutputStream.flush();
 
+            OnScreenLog.log(connectionDescription + " (connected)");
+
 
             /**
              * New thread: continuously read data from the external network and send it to the client
              */
-            SocksResponseThread responseThread = new SocksResponseThread(outerInputStream, innerOutputStream);
+            SocksResponseThread responseThread = new SocksResponseThread(outerInputStream, innerOutputStream, connectionDescription);
             responseThread.start();
 
             /**
@@ -152,16 +172,18 @@ public class ServerThread implements Runnable {
             }
 
         } catch (Exception e) {
+            OnScreenLog.log(connectionDescription+ " threw " + e.getClass().getSimpleName() + ": " + e.getMessage());
             e.printStackTrace();
         } finally {
             try {
                 if (socket != null) socket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+                if (outerSocket != null) outerSocket.close();
+                OnScreenLog.log(connectionDescription + " (disconnected)");
+            } catch (IOException e) { }
         }
 
     }
+
 
     public int byte2int(byte b) {
         return b & 0xff;

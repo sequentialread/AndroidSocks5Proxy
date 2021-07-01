@@ -1,2 +1,2 @@
-rootProject.name = "SOCKS5 Proxy Server"
+rootProject.name = "ProxyServer"
 include ':app'

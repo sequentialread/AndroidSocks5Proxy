@@ -10,7 +10,7 @@ import java.util.ArrayList;
 /**
  * Created by JYM on 2016/7/16.
  */
-public class NetworkStateReceiver extends BroadcastReceiver{
+public class NetworkStateReceiver extends BroadcastReceiver {
 
     public static ArrayList<Thread> threadsList = new ArrayList<Thread>();
 
