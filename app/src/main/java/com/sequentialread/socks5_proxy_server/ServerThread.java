@@ -1,5 +1,7 @@
 package com.sequentialread.socks5_proxy_server;
 
+// original code: https://github.com/edveen/AndroidSocks5Proxy
+
 import android.util.Log;
 
 import java.io.ByteArrayOutputStream;
@@ -7,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.util.Arrays;
 
 /**
  * Created by JYM on 2016/7/12.
@@ -14,7 +17,7 @@ import java.net.Socket;
 public class ServerThread implements Runnable {
 
     private Socket socket;
-    private String TAG = this.getClass().getName();
+    private String TAG = "socks5_proxy_server";
     private int BUFF_SIZE = 1024 * 100;
 
     public ServerThread(Socket socket) {
@@ -30,57 +33,108 @@ public class ServerThread implements Runnable {
             int rc;
             ByteArrayOutputStream byteArrayOutputStream;
 
-            /**
-             * The client will send 510 to the proxy, so the result of execution here is buff={5,1,0}
-             * Caution: This cannot be combined with the following innerInputStream.read(buff, 0, 10); into innerInputStream.read(buff, 0, 13);
-             *          I have tried, and most of the cases have no effect, but occasionally there will be major bugs (cannot read the external network ip), as for the reason is not known yet
-             *          It seems that the operation of this type of input and output is still a little more prudent, don't be too impatient
-             */
-            innerInputStream.read(buff, 0, 3);
+            // https://datatracker.ietf.org/doc/html/rfc1928 page 3
+            // first byte the client sends is the socks version (must be 0x05)
+            // second byte specifies the number of SOCKS5 methods that the client wants to use.
+            byte[] clientHello = new byte[2];
+            innerInputStream.read(clientHello, 0, 2);
+            Log.d(TAG, bytes2HexString( clientHello  ));
+            // only support version 5
+            if(clientHello[0] != (byte)0x05) {
+                socket.close();
+                return;
+            }
+            int numberOfMethods = byte2int(clientHello[1]);
+            byte[] methods = new byte[numberOfMethods];
+            innerInputStream.read(methods, 0, numberOfMethods);
+            Log.d(TAG, bytes2HexString( methods  ));
+            boolean foundNoAuthRequiredMethod = false;
+            for (byte method : methods) {
+                if(method == (byte)0x00) {
+                    foundNoAuthRequiredMethod = true;
+                }
+            }
+            if(!foundNoAuthRequiredMethod) {
+                // we only accept the "no authentication required" method.
+                // if it is not requested, then we respond with  NO ACCEPTABLE METHODS (0xFF)
+                byte noAcceptableMethods = (byte)0xFF;
+                innerOutputStream.write(new byte[]{noAcceptableMethods});
+                innerOutputStream.flush();
+                socket.close();
+                return;
+            }
+            // the client requested the "no authentication required" method 0x00,
+            // so we will respond saying that we, the server, are version 5 and we prefer that method.
 
-            /**
-             *  The proxy sends a response to the client {5,0}
-             */
-            byte[] firstAckMessage = new byte[]{5, 0};
-            byte[] secondAckMessage = new byte[10];
-            innerOutputStream.write(firstAckMessage);
+            Log.d(TAG, "ok we got the NoAuthRequiredMethod, sending 0500");
+            innerOutputStream.write(new byte[]{(byte)0x05, (byte)0x00});
             innerOutputStream.flush();
 
-            /**
-             * The client sends the command 5101 + destination address (4Bytes) + destination port (2Bytes)
-             * That is {5,1,0,1,IPx1,IPx2,IPx3,IPx4,PORTx1,PORTx2} a total of 10 bits
-             * For example, sent to port 80 of the 52.88.216.252 server, then the buff here is {5,1,0,1,52,88,-40,-4,0,80} (where each bit is byte, so in- Between 128~127, you can convert it to 0~255 by yourself)
-             */
-            innerInputStream.read(buff, 0, 10);
+            // now the "method dependent subnegotiation" is supposed to happen
+            // but I think that for "no authentication required" nothing happens and we skip it.
+            // so up next we listen for socks5 commands from the client.
 
-            String IP = byte2int(buff[4]) + "." + byte2int(buff[5]) + "." + byte2int(buff[6]) + "." + byte2int(buff[7]);
-            int port = byte2int(buff[8]) * 256 + byte2int(buff[9]);
+            byte[] clientCommand = new byte[4];
 
-            Log.e("ServerThread", "Connected to " + IP + ":" + port);
-            Socket outerSocket = new Socket(IP, port);
-            InputStream outerInputStream = outerSocket.getInputStream();
-            OutputStream outerOutputStream = outerSocket.getOutputStream();
+            Log.d(TAG, "trying to read clientCommand");
+            innerInputStream.read(clientCommand, 0, 4);
+            Log.d(TAG, bytes2HexString( clientCommand  ));
 
-            /**
-             * The proxy returns a response 5+0+0+1+Internet socket bound IP address (4-byte hexadecimal representation) + Internet socket bound port number (2-byte hexadecimal System representation)
-             */
-            byte ip1[] = new byte[4];
-            int port1 = 0;
-            ip1 = outerSocket.getLocalAddress().getAddress();
-            port1 = outerSocket.getLocalPort();
+            // https://datatracker.ietf.org/doc/html/rfc1928 page 4
+            if(clientCommand[0] != (byte)0x05) {
+                Log.e(TAG, "closing connection because socks version '"+bytes2HexString( new byte[]{clientCommand[0]}  )+"' is not supported. expected 05.");
+                socket.close();
+                return;
+            }
+            if(clientCommand[1] != (byte)0x01) {
+                Log.e(TAG, "closing connection because socks command '"+bytes2HexString( new byte[]{clientCommand[1]}  )+"' is not supported. expected 01 (CONNECT).");
+                innerOutputStream.write(new byte[]{0x05, 0x07}); //version 05, 07 "Command not supported"
+                innerOutputStream.flush();
+                socket.close();
+                return;
+            }
+            if(clientCommand[3] != (byte)0x01) {
+                Log.e(TAG, "closing connection because socks address type '"+bytes2HexString( new byte[]{clientCommand[3]}  )+"' is not supported. expected 01 (IP version 4).");
+                innerOutputStream.write(new byte[]{0x05, 0x08}); //version 05, 08 "Address type not supported"
+                innerOutputStream.flush();
+                socket.close();
+                return;
+            }
 
-            secondAckMessage[0] = 5;
-            secondAckMessage[1] = 0;
-            secondAckMessage[2] = 0;
-            secondAckMessage[3] = 1;
-            secondAckMessage[4] = ip1[0];
-            secondAckMessage[5] = ip1[1];
-            secondAckMessage[6] = ip1[2];
-            secondAckMessage[7] = ip1[3];
-            secondAckMessage[8] = (byte) (port1 >> 8);
-            secondAckMessage[9] = (byte) (port1 & 0xff);
-            innerOutputStream.write(secondAckMessage, 0, 10);
+            byte[] connectAddress = new byte[6];
+            Log.d(TAG, "trying to read connectAddress");
+            innerInputStream.read(connectAddress, 0, 6);
+            Log.d(TAG, bytes2HexString( connectAddress  ));
+
+            String ip = byte2int(connectAddress[0]) + "." + byte2int(connectAddress[1]) + "." + byte2int(connectAddress[2]) + "." + byte2int(connectAddress[3]);
+            int port = byte2int(connectAddress[4]) * 256 + byte2int(connectAddress[5]);
+            Log.d(TAG, ip+":"+port);
+
+            Socket outerSocket = null;
+            InputStream outerInputStream = null;
+            OutputStream outerOutputStream = null;
+            try {
+                outerSocket = new Socket(ip, port);
+                outerInputStream = outerSocket.getInputStream();
+                outerOutputStream = outerSocket.getOutputStream();
+            } catch (Exception ex) {
+                innerOutputStream.write(new byte[]{0x05, 0x01}); //version 05, 01 "general SOCKS server failure"
+                innerOutputStream.flush();
+                return;
+            }
+            Log.e(TAG, "Connected to " + ip + ":" + port);
+
+            // respond to the client with the connection details once the connection has been established.
+            byte[] remoteIp = outerSocket.getLocalAddress().getAddress();
+            int remotePort = outerSocket.getLocalPort();
+
+            innerOutputStream.write(new byte[]{
+                    0x05, 0x00, 0x00, 0x01, // version 5, success 0x00, reserved (null), address  type 0x01 (ip version 4)
+                    remoteIp[0],remoteIp[1],remoteIp[2],remoteIp[3],
+                    (byte) (remotePort >> 8), (byte) (remotePort & 0xff)
+            }, 0, 10);
             innerOutputStream.flush();
+
 
             /**
              * New thread: continuously read data from the external network and send it to the client
@@ -114,4 +168,19 @@ public class ServerThread implements Runnable {
         return b & 0xff;
     }
 
+    private static final char[] HEX = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+            'a', 'b', 'c', 'd', 'e', 'f' };
+
+    public static String bytes2HexString(byte[] bytes) {
+        final int nBytes = bytes.length;
+        char[] result = new char[2 * nBytes];
+
+        int j = 0;
+        for (byte aByte : bytes) {
+            result[j++] = HEX[(0xF0 & aByte) >>> 4];
+            result[j++] = HEX[(0x0F & aByte)];
+        }
+
+        return new String(result);
+    }
 }

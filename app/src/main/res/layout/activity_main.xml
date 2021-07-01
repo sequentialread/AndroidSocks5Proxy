@@ -15,7 +15,7 @@
         android:rotationY="-39"
         android:scaleX="1"
         android:scaleY="1"
-        android:text="SOCKS5 proxy \n listening :34500"
+        android:text="SOCKS5 proxy \n listening :1080"
         android:textAppearance="@style/TextAppearance.AppCompat.Display2"
         android:textColor="#CDDC39"
         app:layout_constraintBottom_toBottomOf="parent"
