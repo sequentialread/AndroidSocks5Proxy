@@ -38,28 +38,28 @@ public class MainActivity extends AppCompatActivity {
 
         OnScreenLog.initialize(this);
 
-        OnScreenLog.log(" __       __          .--.");
-        OnScreenLog.log("(  \"\"--__(  \"\"-_    ,' .-.\\        \uD83C\uDF1F");
-        OnScreenLog.log(" \"-_ __  \"\"--__ \"-_(  (^_^))      /");
-        OnScreenLog.log("    (  \"\"\"--___\"\"--_)\" )-'(      /          ✨");
-        OnScreenLog.log("     \"-__      \"\"---) -(   )__o-/,  ");
-        OnScreenLog.log("         \"\"\"----___ / '   /--\"--'");
-        OnScreenLog.log("                   (\"-_,`(    /");
-        OnScreenLog.log("                    \\   \\ \\");
-        OnScreenLog.log("                     `.  \\ | ");
-        OnScreenLog.log("                       \\  \\/");
-        OnScreenLog.log("       ✨              ||  \\");
-        OnScreenLog.log("                     ,-'/`. \\  ✨");
-        OnScreenLog.log("                     ) /   ) \\   ");
-        OnScreenLog.log("                     |/    `-.\\");
-        OnScreenLog.log("   \uD83C\uDF43                          `\\");
-        OnScreenLog.log("                                               ");
-        OnScreenLog.log("");
-        OnScreenLog.log("Art credit: Ojo '98");
-        OnScreenLog.log("  -- https://www.asciiart.eu/mythology/fairies");
+        OnScreenLog.logScreenOnly(" __       __          .--.");
+        OnScreenLog.logScreenOnly("(  \"\"--__(  \"\"-_    ,' .-.\\        \uD83C\uDF1F");
+        OnScreenLog.logScreenOnly(" \"-_ __  \"\"--__ \"-_(  (^_^))      /");
+        OnScreenLog.logScreenOnly("    (  \"\"\"--___\"\"--_)\" )-'(      /          ✨");
+        OnScreenLog.logScreenOnly("     \"-__      \"\"---) -(   )__o-/,  ");
+        OnScreenLog.logScreenOnly("         \"\"\"----___ / '   /--\"--'");
+        OnScreenLog.logScreenOnly("                   (\"-_,`(    /");
+        OnScreenLog.logScreenOnly("                    \\   \\ \\");
+        OnScreenLog.logScreenOnly("                     `.  \\ | ");
+        OnScreenLog.logScreenOnly("                       \\  \\/");
+        OnScreenLog.logScreenOnly("       ✨              ||  \\");
+        OnScreenLog.logScreenOnly("                     ,-'/`. \\  ✨");
+        OnScreenLog.logScreenOnly("                     ) /   ) \\   ");
+        OnScreenLog.logScreenOnly("                     |/    `-.\\");
+        OnScreenLog.logScreenOnly("   \uD83C\uDF43                         `\\");
+        OnScreenLog.logScreenOnly("                                               ");
+        OnScreenLog.logScreenOnly("");
+        OnScreenLog.logScreenOnly("Art credit: Ojo '98");
+        OnScreenLog.logScreenOnly("  -- https://www.asciiart.eu/mythology/fairies");
 
 
-        OnScreenLog.log("");
+        OnScreenLog.logScreenOnly("");
         OnScreenLog.log("ProxyServer starting up...");
 
         connectivityManager = (ConnectivityManager) this.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -95,7 +95,7 @@ public class MainActivity extends AppCompatActivity {
                             serverSocket = new ServerSocket(1080);
                         }
                         for(String ipString : finalIpAddresses) {
-                            OnScreenLog.log("SOCKS5 Proxy Server is listening at " + ipString + ":" + serverSocket.getLocalPort());
+                            OnScreenLog.log("🧦 SOCKS5 Proxy Server is listening at " + ipString + ":" + serverSocket.getLocalPort());
                         }
                         while (true) {
                             Socket socket = serverSocket.accept();

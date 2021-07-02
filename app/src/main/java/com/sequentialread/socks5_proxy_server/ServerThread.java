@@ -8,6 +8,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.Socket;
 /**
  * Created by JYM on 2016/7/12.
@@ -106,23 +107,47 @@ public class ServerThread implements Runnable {
                 socket.close();
                 return;
             }
-            if(clientCommand[3] != (byte)0x01) {
+            if(clientCommand[3] != (byte)0x01 && clientCommand[3] != (byte)0x03) {
                 OnScreenLog.log(
                         "incoming connection "+connectionDescription
                                 + " was closed because socks address type '0x"+bytes2HexString( new byte[]{clientCommand[3]}  )
-                                +"' is not supported. expected 0x01 (IP version 4)."
+                                +"' is not supported. expected 0x01 (IP version 4) or 0x03 (Domain Name)."
                 );
                 innerOutputStream.write(new byte[]{0x05, 0x08}); //version 05, 08 "Address type not supported"
                 innerOutputStream.flush();
                 socket.close();
                 return;
             }
+            String ip = null;
+            int port = 0;
+            if(clientCommand[3] == (byte)0x01) {
+                byte[] connectAddress = new byte[6];
+                innerInputStream.read(connectAddress, 0, 6);
 
-            byte[] connectAddress = new byte[6];
-            innerInputStream.read(connectAddress, 0, 6);
+                ip = byte2int(connectAddress[0]) + "." + byte2int(connectAddress[1]) + "." + byte2int(connectAddress[2]) + "." + byte2int(connectAddress[3]);
+                port = byte2int(connectAddress[4]) * 256 + byte2int(connectAddress[5]);
+            }
+            if(clientCommand[3] == (byte)0x03) {
+                byte[] domainNameLength = new byte[1];
+                innerInputStream.read(domainNameLength, 0, 1);
 
-            String ip = byte2int(connectAddress[0]) + "." + byte2int(connectAddress[1]) + "." + byte2int(connectAddress[2]) + "." + byte2int(connectAddress[3]);
-            int port = byte2int(connectAddress[4]) * 256 + byte2int(connectAddress[5]);
+                byte[] domainNameBytes = new byte[byte2int(domainNameLength[0])];
+                innerInputStream.read(domainNameBytes, 0, domainNameBytes.length);
+                String domainName = new String(domainNameBytes);
+                //String domainName = domainNameWithPadding.substring(0,domainNameWithPadding.length()-1);
+
+                OnScreenLog.log(connectionDescription + " (dns lookup "+domainName+")");
+
+                InetAddress inet = InetAddress.getByName(domainName.toLowerCase());
+                ip = inet.getHostAddress();
+
+                byte[] portBytes = new byte[2];
+                innerInputStream.read(portBytes, 0, 2);
+                //OnScreenLog.log(connectionDescription + " (portbytes "+bytes2HexString( portBytes  )+")");
+                port = byte2int(portBytes[0]) * 256 + byte2int(portBytes[1]);
+                //OnScreenLog.log(connectionDescription + " (port "+port+")");
+            }
+
 
             connectionDescription = clientAddress + " --> " + ip+":"+port;
             OnScreenLog.log(connectionDescription + " (dailing)");

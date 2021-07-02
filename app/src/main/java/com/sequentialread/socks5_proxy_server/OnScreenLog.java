@@ -28,10 +28,13 @@ public class OnScreenLog {
         textView = searchForOnScreenLogTextViewRecurse(activity.getWindow().getDecorView());
     }
 
+    public static void logScreenOnly (String text){
+        maintainLog(text);
+    }
+
     public static void log (String text){
-        String logText = text;
         Log.d(TAG, text);
-        maintainLog(logText);
+        maintainLog(text);
     }
 
     private static void maintainLog(String newText){
